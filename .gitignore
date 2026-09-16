@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.artifacts/
+.DS_Store
+*.log
+.env
+chinatown-map-reference*.jpg
+map-crop-*.jpg
+district-*.jpg
+base64-roundtrip.jpg
