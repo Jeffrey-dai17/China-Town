@@ -32,6 +32,8 @@ button:disabled { cursor: not-allowed; opacity: 0.48; }
 .icon-button { width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .icon-button:hover { background: #e9eeeb; }
 .icon-button.is-active { background: var(--jade); border-color: var(--jade); color: #fff; }
+.icon-button--danger { color: var(--red); }
+.icon-button--danger:hover { color: #fff; background: var(--red); border-color: var(--red); }
 .icon-button--small { width: 30px; height: 30px; }
 .icon-button--tiny { width: 26px; height: 26px; border-radius: 4px; }
 .icon-text-button { min-height: 38px; padding: 0 10px; background: transparent; border-radius: 5px; }

@@ -7,6 +7,32 @@ import { emitWithAck, socket } from './socket.js'
 
 const SESSION_KEY = 'canal-street-session'
 
+function ensureSocketConnected() {
+  if (socket.connected) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      cleanup()
+      reject(new Error('The table did not respond. Check your connection.'))
+    }, 7000)
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      socket.off('connect', onConnect)
+      socket.off('connect_error', onError)
+    }
+    const onConnect = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = () => {
+      cleanup()
+      reject(new Error('The table did not respond. Check your connection.'))
+    }
+    socket.once('connect', onConnect)
+    socket.once('connect_error', onError)
+    socket.connect()
+  })
+}
+
 function readSession() {
   try {
     return JSON.parse(localStorage.getItem(SESSION_KEY))
@@ -109,6 +135,7 @@ export default function App() {
 
   const enterRoom = async (eventName, payload) => {
     try {
+      await ensureSocketConnected()
       const response = await emitWithAck(eventName, payload)
       localStorage.setItem(SESSION_KEY, JSON.stringify(response.session))
       return true
@@ -126,6 +153,17 @@ export default function App() {
     } catch (error) {
       notify(error.message)
     }
+  }
+
+  const leaveGame = () => {
+    const confirmed = window.confirm('Leave this game on this browser? Your saved seat will be cleared, so refresh will not bring you back to this room.')
+    if (!confirmed) return
+    localStorage.removeItem(SESSION_KEY)
+    setRoom(null)
+    setRestoring(false)
+    socket.disconnect()
+    socket.connect()
+    notify('You left the game. You can open a new table now.', 'success')
   }
 
   const act = useCallback(async (eventName, payload = {}) => {
@@ -159,7 +197,7 @@ export default function App() {
   } else if (room.phase === 'lobby') {
     content = <Lobby room={room} act={act} onLeave={leaveLobby} connected={connected} notify={notify} />
   } else {
-    content = <GameTable room={room} act={act} connected={connected} notify={notify} />
+    content = <GameTable room={room} act={act} connected={connected} notify={notify} onLeave={leaveGame} />
   }
 
   return (

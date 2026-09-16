@@ -9,6 +9,7 @@ import {
   Inbox,
   Layers3,
   LockKeyhole,
+  LogOut,
   Map,
   Trophy,
   X,
@@ -26,7 +27,7 @@ export function GameTable(props) {
   return <GameTableView key={props.room.round} {...props} />
 }
 
-function GameTableView({ room, act, connected, notify }) {
+function GameTableView({ room, act, connected, notify, onLeave }) {
   const me = playerById(room, room.meId)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [sidebarTab, setSidebarTab] = useState(room.phase === 'trading' ? 'trades' : 'hand')
@@ -98,6 +99,7 @@ function GameTableView({ room, act, connected, notify }) {
         </div>
         <div className="game-header__actions">
           <span className="private-cash"><LockKeyhole size={15} /> {formatCash(me.cash)}</span>
+          <button className="icon-button icon-button--danger" onClick={onLeave} title="Leave this game" aria-label="Leave this game"><LogOut size={18} /></button>
           <button className="icon-button" onClick={() => setRulesOpen(true)} title="Rules and payouts"><BookOpen size={19} /></button>
         </div>
       </header>
