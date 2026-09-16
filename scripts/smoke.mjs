@@ -83,6 +83,24 @@ const lotGeometry = await alice.page.locator('.board-lot').evaluateAll((lots) =>
   }
 })
 if (!lotGeometry.allEqualSquares) throw new Error('Every board lot must use the same square dimensions')
+if (Math.abs(lotGeometry.size.width - 68) > 0.01 || Math.abs(lotGeometry.size.height - 68) > 0.01) {
+  throw new Error(`Every board lot must remain 68x68, got ${JSON.stringify(lotGeometry.size)}`)
+}
+const fittedBoard = await alice.page.locator('.board-scroll').evaluate((scrollArea) => {
+  const board = scrollArea.querySelector('.board-scale').getBoundingClientRect()
+  const viewport = scrollArea.getBoundingClientRect()
+  return {
+    fullyVisible: board.left >= viewport.left - 1
+      && board.top >= viewport.top - 1
+      && board.right <= viewport.right + 1
+      && board.bottom <= viewport.bottom + 1,
+    board: { width: board.width, height: board.height },
+    viewport: { width: viewport.width, height: viewport.height },
+  }
+})
+if (!fittedBoard.fullyVisible) {
+  throw new Error(`Expected fitted board to be fully visible, got ${JSON.stringify(fittedBoard)}`)
+}
 await alice.page.screenshot({ path: `${outputDir}/trading-desktop.png`, fullPage: true })
 
 await alice.page.getByTitle('Trade with Bob').click()

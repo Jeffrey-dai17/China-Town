@@ -194,21 +194,24 @@ function PhaseDock({ room, me, selectedShop, act }) {
 
 function HandPanel({ room, me, selectedShop, setSelectedShop, myPlacementTurn }) {
   const totalTiles = Object.values(me.tiles).reduce((sum, count) => sum + count, 0)
+  const heldShops = SHOP_TYPES.filter((shop) => me.tiles[shop.id] > 0)
   return (
     <div className="hand-panel">
       <div className="sidebar-section-heading"><div><strong>Your loose tiles</strong><span>{totalTiles} in hand</span></div>{room.phase === 'placement' && !myPlacementTurn && <small>Waiting for your turn</small>}</div>
       <div className="hand-grid">
-        {SHOP_TYPES.map((shop) => (
+        {heldShops.map((shop) => (
           <ShopTile
             key={shop.id}
             shopId={shop.id}
             count={me.tiles[shop.id]}
+            compact
             selected={myPlacementTurn && selectedShop === shop.id}
             disabled={!me.tiles[shop.id]}
             interactive={myPlacementTurn && Boolean(me.tiles[shop.id])}
             onClick={() => setSelectedShop((current) => current === shop.id ? null : shop.id)}
           />
         ))}
+        {!heldShops.length && <div className="hand-empty-state">No loose tiles in your hand</div>}
       </div>
       <div className="public-hands">
         <h3>At the table</h3>

@@ -1,7 +1,12 @@
-import { CalendarDays, Minus, Plus, Trees } from 'lucide-react'
-import { useState } from 'react'
+import { CalendarDays, Maximize2, Minus, Plus, Trees } from 'lucide-react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { DISTRICTS, PLAYER_COLORS, SHOP_BY_ID, YEARS } from '../../shared/gameData.js'
 import { ShopIcon } from './ShopTile.jsx'
+
+const BOARD_WIDTH = 1360
+const BOARD_HEIGHT = 960
+const MIN_ZOOM = 0.2
+const MAX_ZOOM = 1.36
 
 function District({ district, room, selectableLots, selectedLots, onLotClick }) {
   return (
@@ -54,21 +59,56 @@ function District({ district, room, selectableLots, selectedLots, onLotClick }) 
 }
 
 export function Board({ room, selectableLotIds = [], selectedLotIds = [], onLotClick }) {
-  const [zoom, setZoom] = useState(() => typeof window !== 'undefined' && window.innerWidth < 821 ? 0.68 : 0.94)
+  const scrollRef = useRef(null)
+  const [zoom, setZoom] = useState(0.94)
+  const [fitMode, setFitMode] = useState(true)
   const selectableLots = new Set(selectableLotIds)
   const selectedLots = new Set(selectedLotIds)
   const currentYear = YEARS[Math.max(0, room.round - 1)]
 
+  const fitBoard = useCallback(() => {
+    const scrollArea = scrollRef.current
+    if (!scrollArea) return
+    const styles = window.getComputedStyle(scrollArea)
+    const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight)
+    const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom)
+    const availableWidth = Math.max(1, scrollArea.clientWidth - horizontalPadding)
+    const availableHeight = Math.max(1, scrollArea.clientHeight - verticalPadding)
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(1, availableWidth / BOARD_WIDTH, availableHeight / BOARD_HEIGHT))
+    setZoom(+nextZoom.toFixed(3))
+    setFitMode(true)
+    scrollArea.scrollTo({ left: 0, top: 0 })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!fitMode) return undefined
+    const scrollArea = scrollRef.current
+    const frame = window.requestAnimationFrame(fitBoard)
+    const observer = new ResizeObserver(fitBoard)
+    if (scrollArea) observer.observe(scrollArea)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [fitBoard, fitMode])
+
+  const changeZoom = (amount) => {
+    setFitMode(false)
+    setZoom((value) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, +(value + amount).toFixed(2))))
+  }
+
   return (
     <div className="board-stage">
       <div className="board-zoom-controls" aria-label="Board zoom">
-        <button className="icon-button" onClick={() => setZoom((value) => Math.max(0.56, +(value - 0.12).toFixed(2)))} title="Zoom out"><Minus size={17} /></button>
+        <button className="icon-button" onClick={() => changeZoom(-0.12)} title="Zoom out" aria-label="Zoom out"><Minus size={17} /></button>
         <span>{Math.round(zoom * 100)}%</span>
-        <button className="icon-button" onClick={() => setZoom((value) => Math.min(1.36, +(value + 0.12).toFixed(2)))} title="Zoom in"><Plus size={17} /></button>
+        <button className="icon-button" onClick={() => changeZoom(0.12)} title="Zoom in" aria-label="Zoom in"><Plus size={17} /></button>
+        <button className={`icon-button board-fit-button ${fitMode ? 'is-active' : ''}`} onClick={fitBoard} title="Fit entire board" aria-label="Fit entire board"><Maximize2 size={16} /></button>
       </div>
-      <div className="board-scroll">
+      <div className="board-scroll" ref={scrollRef}>
         <div className="board-scale" style={{ '--board-zoom': zoom }}>
-          <div className="city-board">
+          <div className="board-transform">
+            <div className="city-board">
             <div className="board-map-title" aria-hidden="true"><span>New York City</span><strong>Canal Street Exchange</strong></div>
             <div className="board-street board-street--canal"><span>Canal Street</span></div>
             <div className="districts-row districts-row--north">
@@ -94,7 +134,8 @@ export function Board({ room, selectableLotIds = [], selectedLotIds = [], onLotC
               <small>Round {room.round} of 6</small>
             </div>
             <div className="board-street board-street--worth"><span>Worth Street</span></div>
-            <div className="board-street board-street--bowery"><span>Bowery</span></div>
+              <div className="board-street board-street--bowery"><span>Bowery</span></div>
+            </div>
           </div>
         </div>
       </div>
