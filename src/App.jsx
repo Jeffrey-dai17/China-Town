@@ -6,6 +6,8 @@ import { GameTable } from './components/GameTable.jsx'
 import { emitWithAck, socket } from './socket.js'
 
 const SESSION_KEY = 'canal-street-session'
+const SAVED_SEATS_KEY = 'canal-street-saved-seats'
+const MISSING_SEAT_ERROR = 'That saved seat is no longer available'
 
 function ensureSocketConnected() {
   if (socket.connected) return Promise.resolve()
@@ -39,6 +41,40 @@ function readSession() {
   } catch {
     return null
   }
+}
+
+function readSavedSeats() {
+  try {
+    const seats = JSON.parse(localStorage.getItem(SAVED_SEATS_KEY))
+    return seats && typeof seats === 'object' && !Array.isArray(seats) ? seats : {}
+  } catch {
+    return {}
+  }
+}
+
+function savedSeatFor(roomCode) {
+  return readSavedSeats()[String(roomCode || '').trim().toUpperCase()] || null
+}
+
+function rememberSavedSeat(session) {
+  if (!session?.roomCode || !session?.playerId || !session?.token) return
+  const roomCode = String(session.roomCode).toUpperCase()
+  const seats = readSavedSeats()
+  seats[roomCode] = { ...session, roomCode }
+  localStorage.setItem(SAVED_SEATS_KEY, JSON.stringify(seats))
+}
+
+function rememberSession(session) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  rememberSavedSeat(session)
+}
+
+function forgetSavedSeat(roomCode) {
+  const normalizedCode = String(roomCode || '').trim().toUpperCase()
+  const seats = readSavedSeats()
+  if (!seats[normalizedCode]) return
+  delete seats[normalizedCode]
+  localStorage.setItem(SAVED_SEATS_KEY, JSON.stringify(seats))
 }
 
 export default function App() {
@@ -93,9 +129,11 @@ export default function App() {
         return
       }
       try {
-        await emitWithAck('room:resume', session)
-      } catch {
+        const response = await emitWithAck('room:resume', session)
+        rememberSession(response.session || session)
+      } catch (error) {
         localStorage.removeItem(SESSION_KEY)
+        if (error.message === MISSING_SEAT_ERROR) forgetSavedSeat(session.roomCode)
         setRoom(null)
       } finally {
         setRestoring(false)
@@ -136,8 +174,22 @@ export default function App() {
   const enterRoom = async (eventName, payload) => {
     try {
       await ensureSocketConnected()
+      if (eventName === 'room:join') {
+        const savedSeat = savedSeatFor(payload.code)
+        if (savedSeat) {
+          try {
+            const response = await emitWithAck('room:resume', savedSeat)
+            rememberSession(response.session || savedSeat)
+            notify('Welcome back. Your saved seat has been restored.', 'success')
+            return true
+          } catch (error) {
+            if (error.message !== MISSING_SEAT_ERROR) throw error
+            forgetSavedSeat(payload.code)
+          }
+        }
+      }
       const response = await emitWithAck(eventName, payload)
-      localStorage.setItem(SESSION_KEY, JSON.stringify(response.session))
+      rememberSession(response.session)
       return true
     } catch (error) {
       notify(error.message)
@@ -149,6 +201,7 @@ export default function App() {
     try {
       await emitWithAck('room:leave')
       localStorage.removeItem(SESSION_KEY)
+      forgetSavedSeat(room.code)
       setRoom(null)
     } catch (error) {
       notify(error.message)
@@ -156,14 +209,15 @@ export default function App() {
   }
 
   const leaveGame = () => {
-    const confirmed = window.confirm('Leave this game on this browser? Your saved seat will be cleared, so refresh will not bring you back to this room.')
+    const confirmed = window.confirm(`Leave this game? Your seat will stay saved on this browser. Enter room code ${room.code} to rejoin.`)
     if (!confirmed) return
+    rememberSavedSeat(readSession())
     localStorage.removeItem(SESSION_KEY)
     setRoom(null)
     setRestoring(false)
     socket.disconnect()
     socket.connect()
-    notify('You left the game. You can open a new table now.', 'success')
+    notify(`You left the game. Enter room code ${room.code} to rejoin your seat.`, 'success')
   }
 
   const act = useCallback(async (eventName, payload = {}) => {

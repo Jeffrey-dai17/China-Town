@@ -139,6 +139,31 @@ await alice.page.locator('.selection-sheet').waitFor()
 await alice.page.setViewportSize({ width: 390, height: 844 })
 await alice.page.screenshot({ path: `${outputDir}/round-two-mobile.png`, fullPage: true })
 
+const originalAliceSession = await alice.page.evaluate(() => JSON.parse(localStorage.getItem('canal-street-session')))
+alice.page.once('dialog', (dialog) => dialog.accept())
+await alice.page.getByRole('button', { name: 'Leave this game' }).click()
+await alice.page.getByLabel('Your name').waitFor()
+const leaveStorage = await alice.page.evaluate(() => ({
+  active: localStorage.getItem('canal-street-session'),
+  saved: JSON.parse(localStorage.getItem('canal-street-saved-seats')),
+}))
+if (leaveStorage.active !== null) throw new Error('Leaving an active game must disable automatic restore')
+if (leaveStorage.saved?.[code]?.playerId !== originalAliceSession.playerId) {
+  throw new Error('Leaving an active game must preserve the saved seat on this browser')
+}
+await alice.page.reload({ waitUntil: 'networkidle' })
+await unlockIfNeeded(alice.page)
+await alice.page.getByLabel('Your name').waitFor()
+if (await alice.page.locator('.board-stage').count()) throw new Error('An intentional leave must not auto-rejoin after refresh')
+await alice.page.getByRole('button', { name: 'Join table' }).click()
+await alice.page.getByLabel('Room code').fill(code)
+await alice.page.getByRole('button', { name: 'Take your seat' }).click()
+await alice.page.locator('.board-stage').waitFor()
+const rejoinedAliceSession = await alice.page.evaluate(() => JSON.parse(localStorage.getItem('canal-street-session')))
+if (rejoinedAliceSession.playerId !== originalAliceSession.playerId) {
+  throw new Error('Entering the room code must restore the same saved player seat')
+}
+
 const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } })
 const mobilePage = await mobile.newPage()
 await mobilePage.goto(baseUrl, { waitUntil: 'networkidle' })
@@ -150,4 +175,4 @@ for (const player of [alice, bob, cara]) await player.context.close()
 await browser.close()
 
 if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`)
-console.log(JSON.stringify({ code, lotCount, lotSize: lotGeometry.size, screenshots: 5 + passwordScreenshots, errors: 0 }))
+console.log(JSON.stringify({ code, lotCount, lotSize: lotGeometry.size, rejoinedPlayer: rejoinedAliceSession.playerId === originalAliceSession.playerId, screenshots: 5 + passwordScreenshots, errors: 0 }))
